@@ -1,0 +1,13 @@
+language: go
+
+go:
+  - 1.11.1
+
+install:
+  - go get -v resenje.org/goembedfs
+
+before_script:
+  - go vet -v resenje.org/goembedfs/...
+
+script:
+  - go test -v resenje.org/goembedfs/...
