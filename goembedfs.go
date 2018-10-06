@@ -149,8 +149,12 @@ func (f *File) Name() (name string) { return f.name }
 // Data returns complete data of file.
 func (f *File) Data() (data []byte) { return f.data }
 
-// Close does not do anything. 
-func (f *File) Close() (err error) { return nil }
+// Close does not close anything. It seeks the Reader to
+// start of the file to ensure that can be read again.
+func (f *File) Close() (err error) {
+	_, err = f.Reader.Seek(0, os.SEEK_SET)
+	return err
+}
 
 // Stat returns os.FileInfo.
 func (f *File) Stat() (fi os.FileInfo, err error) { return f, nil }
