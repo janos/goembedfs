@@ -187,7 +187,11 @@ func ReadFile(name string) (data []byte, err error) {
 
 // Open returns File for a particular name. 
 func Open(name string) (f *File, err error) {
-	f = files[strings.Replace(name, "\\", "/", -1)]
+	name = strings.Replace(name, "\\", "/", -1)
+	if len(name) > 0 && name[0] == '/' {
+		name = name[1:]
+	}
+	f = files[name]
 	if f == nil {
 		return nil, &os.PathError{Path: name, Err: os.ErrNotExist}
 	}
