@@ -8,6 +8,7 @@ Features of generated files:
 - compatibility with `http.FileSystem`
 - helper functions for accessing and reading files
 - embedded files deduplication
+- gzip support with configurable minimal space savings
 - go vet and golint clean
 
 
@@ -78,6 +79,28 @@ All file paths in `mypackage.go` will not contain `assets` prefix in path names.
 
 To exclude generated files for some type of build, `--tags` option is available.
 It can contain a comma delimited list of tags for each line of `// +build` directive.
+
+
+### Gzip
+
+Generated data may be gzip compressed with option `--gzip` and to specify minimal
+space savings (reduction in size relative to the uncompressed size in percentage)
+for data to be saved as gzip with option `--min-gzip-space-savings`.
+
+Default minimal space savings is 5%.
+
+```
+goembedfs -o mypackage.go --gzip
+```
+
+To set minimal space savings to 30%:
+
+```
+goembedfs -o mypackage.go --gzip --min-gzip-space-savings 30
+```
+
+It is possible that compressed data is slightly longer then the uncompressed due to
+gzip metadata. In this case data for that file will be saved in uncompressed form.
 
 
 ## Inspiration

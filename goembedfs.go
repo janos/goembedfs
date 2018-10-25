@@ -7,8 +7,10 @@ package goembedfs
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/sha1"
 	"fmt"
+	"html/template"
 	"io"
 	"sort"
 	"strings"
@@ -21,21 +23,61 @@ type Generator struct {
 	names  map[string]struct{}
 	hashes map[[20]byte]struct{}
 
-	headerWritten bool
-	packageName   string
-	tags          []string
+	headerWritten       bool
+	packageName         string
+	tags                []string
+	gzipEnabled         bool
+	minGzipSpaceSavings float64
+}
+
+// Option sets optional parameters for Generator.
+// It is used as variadic argument in the New function.
+type Option func(*Generator)
+
+// WithTags adds build tags to the generated package.
+// This option can be repeated as argument in the New function.
+func WithTags(tags ...string) Option {
+	return func(g *Generator) {
+		g.tags = append(g.tags, tags...)
+	}
+}
+
+// WithGzip sets if gzip compression is enabled.
+// Compressing data with gzip reduces binary file size,
+// but delays calling the main function as decompressions
+// is performed in the init function.
+func WithGzip(enabled bool) Option {
+	return func(g *Generator) {
+		g.gzipEnabled = enabled
+	}
+}
+
+// WithMinGzipSpaceSavings sets the minimal space savings
+// for gzipped data in order to be generated as gzip.
+// The range must be [0..100] (percentage) where
+// 0 represents no space saving.
+func WithMinGzipSpaceSavings(s float64) Option {
+	return func(g *Generator) {
+		if s > 100 {
+			s = 100
+		}
+		g.minGzipSpaceSavings = s / 100
+	}
 }
 
 // New returns a new instance of Generator that writes to provided writer
-// a Go generated package with provied package name and build tags.
-func New(w io.Writer, packageName string, tags []string) *Generator {
-	return &Generator{
+// a Go generated package with provied package name and optional parameters.
+func New(w io.Writer, packageName string, opts ...Option) (g *Generator) {
+	g = &Generator{
 		w:           w,
 		names:       make(map[string]struct{}),
 		hashes:      make(map[[20]byte]struct{}),
 		packageName: packageName,
-		tags:        tags,
 	}
+	for _, opt := range opts {
+		opt(g)
+	}
+	return g
 }
 
 // AddFile adds a single file with name as full path, data and modification time.
@@ -50,8 +92,25 @@ func (g *Generator) AddFile(name string, data []byte, modTime time.Time) (err er
 	g.names[name] = struct{}{}
 
 	hash := sha1.Sum(data)
+	size := len(data)
 	if _, ok := g.hashes[hash]; !ok {
-		_, err = fmt.Fprintf(g.w, "	data%x := []byte(\"%v\")\n", hash, hex(data))
+		var gzipData []byte
+		if g.gzipEnabled {
+			var buf bytes.Buffer
+			w := gzip.NewWriter(&buf)
+			if _, err := io.Copy(w, bytes.NewReader(data)); err != nil {
+				return fmt.Errorf("gzip: %v", err)
+			}
+			if err := w.Close(); err != nil {
+				return fmt.Errorf("close gzip: %v", err)
+			}
+			gzipData = buf.Bytes()
+		}
+		if g.gzipEnabled && float64(len(gzipData))/float64(size) <= (1-g.minGzipSpaceSavings) {
+			_, err = fmt.Fprintf(g.w, "	data%x := gunzip([]byte(\"%v\"))\n", hash, hex(gzipData))
+		} else {
+			_, err = fmt.Fprintf(g.w, "	data%x := []byte(\"%v\")\n", hash, hex(data))
+		}
 		if err != nil {
 			return err
 		}
@@ -65,7 +124,7 @@ func (g *Generator) AddFile(name string, data []byte, modTime time.Time) (err er
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "	files[%q] = &File{\n", name)
 	fmt.Fprintf(&buf, "		name:    %q,\n", name)
-	fmt.Fprintf(&buf, "		size:    %d,\n", len(data))
+	fmt.Fprintf(&buf, "		size:    %d,\n", size)
 	fmt.Fprintf(&buf, "		modTime: time.Unix(%d, %d),\n", modTimeUnix/sec, modTimeUnix%sec)
 	fmt.Fprintf(&buf, "		data:    data%x,\n", hash)
 	fmt.Fprintf(&buf, "		Reader:  bytes.NewReader(data%x),\n", hash)
@@ -122,10 +181,14 @@ func (g *Generator) writeHeader() (err error) {
 	// imports
 	// types
 	// functions
-	_, err = fmt.Fprintf(g.w, `package %s
+	err = template.Must(template.New("").Parse(`package {{ .PackageName }}
 
 import (
 	"bytes"
+	{{- if .Gzip }}
+	"compress/gzip"
+	{{- end }}
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -152,7 +215,7 @@ func (f *File) Data() (data []byte) { return f.data }
 // Close does not close anything. It seeks the Reader to
 // start of the file to ensure that can be read again.
 func (f *File) Close() (err error) {
-	_, err = f.Reader.Seek(0, os.SEEK_SET)
+	_, err = f.Reader.Seek(0, io.SeekStart)
 	return err
 }
 
@@ -216,12 +279,32 @@ func (fs *fileSystem) Open(name string) (f http.File, err error) {
 	return Open(name)
 }
 
+{{- if .Gzip }}
+
+func gunzip(data []byte) (d []byte) {
+	r, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		panic(err)
+	}
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		panic(err)
+	}
+	if err := r.Close(); err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
+}
+{{- end }}
+
 func init() {
-`, g.packageName)
+`)).Execute(g.w, map[string]interface{}{
+		"PackageName": g.packageName,
+		"Gzip":        g.gzipEnabled,
+	})
 	if err != nil {
 		return err
 	}
-
 	g.headerWritten = true
 	return nil
 }

@@ -20,10 +20,12 @@ import (
 var (
 	cli = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
-	output = cli.String("o", "", "Output filename.")
-	cwd    = cli.String("w", "", "Change working directory.")
-	tags   = cli.String("tags", "", "Comma-delimited list of build tags.")
-	help   = cli.Bool("h", false, "Show program usage.")
+	output              = cli.String("o", "", "Output filename.")
+	cwd                 = cli.String("w", "", "Change working directory.")
+	tags                = cli.String("tags", "", "Comma-delimited list of build tags.")
+	gzip                = cli.Bool("gzip", false, "Compress data with GZip.")
+	minGzipSpaceSavings = cli.Float64("min-gzip-space-savings", 5, "Minimal reduction in size relative to the uncompressed size in percentage. Default 5.")
+	help                = cli.Bool("h", false, "Show program usage.")
 )
 
 func main() {
@@ -74,7 +76,7 @@ OPTIONS
 		w = f
 	}
 
-	generator := goembedfs.New(w, args[0], strings.Split(*tags, ","))
+	generator := goembedfs.New(w, args[0], goembedfs.WithTags(strings.Split(*tags, ",")...), goembedfs.WithGzip(*gzip), goembedfs.WithMinGzipSpaceSavings(*minGzipSpaceSavings))
 
 	for _, path := range paths {
 		fi, err := os.Stat(path)
