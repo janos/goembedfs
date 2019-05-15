@@ -70,6 +70,11 @@ OPTIONS
 
 	var w io.Writer = os.Stdout
 	if *output != "" {
+		dir := filepath.Dir(*output)
+		if _, err := os.Stat(dir); os.IsNotExist(err) {
+			err := os.MkdirAll(dir, 0777)
+			handleError(err, "create directories")
+		}
 		f, err := os.Create(*output)
 		handleError(err, "output")
 		defer f.Close()
