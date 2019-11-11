@@ -252,7 +252,7 @@ func ReadFile(name string) (data []byte, err error) {
 	return f.data, nil
 }
 
-// Open returns File for a particular name. 
+// Open returns File for a particular name.
 func Open(name string) (f *File, err error) {
 	name = strings.Replace(name, "\\", "/", -1)
 	if len(name) > 0 && name[0] == '/' {

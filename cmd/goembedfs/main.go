@@ -25,6 +25,7 @@ var (
 	tags                = cli.String("tags", "", "Comma-delimited list of build tags.")
 	gzip                = cli.Bool("gzip", false, "Compress data with GZip.")
 	minGzipSpaceSavings = cli.Float64("min-gzip-space-savings", 5, "Minimal reduction in size relative to the uncompressed size in percentage. Default 5.")
+	strip               = cli.Int("strip", 0, "Remove the specified number of leading path elements.")
 	help                = cli.Bool("h", false, "Show program usage.")
 )
 
@@ -90,8 +91,15 @@ OPTIONS
 		data, err := ioutil.ReadFile(path)
 		handleError(err, "read file")
 
+		path := filepath.Clean(filepath.ToSlash(path))
+		if *strip > 0 {
+			elements := strings.Split(path, string(filepath.Separator))
+			if len(elements) > *strip {
+				path = filepath.Join(elements[*strip:]...)
+			}
+		}
 		err = generator.AddFile(
-			filepath.ToSlash(path),
+			path,
 			data,
 			fi.ModTime(),
 		)
