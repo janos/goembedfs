@@ -252,6 +252,16 @@ func ReadFile(name string) (data []byte, err error) {
 	return f.data, nil
 }
 
+// MustReadFile calls ReadFile function and panics if it
+// returns an error.
+func MustReadFile(name string) (data []byte) {
+	f, err := Open(name)
+	if err != nil {
+		panic(err)
+	}
+	return f.data
+}
+
 // Open returns File for a particular name.
 func Open(name string) (f *File, err error) {
 	name = strings.Replace(name, "\\", "/", -1)
