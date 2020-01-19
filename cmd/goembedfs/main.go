@@ -44,7 +44,9 @@ OPTIONS
 		cli.PrintDefaults()
 	}
 
-	cli.Parse(os.Args[1:])
+	if err := cli.Parse(os.Args[1:]); err != nil {
+		handleError(err, "")
+	}
 
 	if *help {
 		cli.Usage()
